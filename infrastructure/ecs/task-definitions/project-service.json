@@ -1,0 +1,93 @@
+{
+  "family": "project-service",
+  "containerDefinitions": [
+    {
+      "name": "project-service",
+      "image": "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/project-service:${IMAGE_TAG}",
+      "essential": true,
+      "memory": 512,
+      "cpu": 256,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "FLASK_APP",
+          "value": "app:app"
+        },
+        {
+          "name": "FLASK_ENV",
+          "value": "${ENV}"
+        },
+        {
+          "name": "MONGO_URI",
+          "value": "${MONGO_URI}"
+        },
+        {
+          "name": "REDIS_URI",
+          "value": "${REDIS_URI}"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "${LOG_LEVEL}"
+        },
+        {
+          "name": "AUTH_SERVICE_URL",
+          "value": "${AUTH_SERVICE_URL}"
+        },
+        {
+          "name": "TASK_SERVICE_URL",
+          "value": "${TASK_SERVICE_URL}"
+        },
+        {
+          "name": "JWT_SECRET_KEY",
+          "value": "${JWT_SECRET_KEY}"
+        },
+        {
+          "name": "EVENT_BUS_URI",
+          "value": "${EVENT_BUS_URI}"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:8000/api/v1/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/project-service",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ],
+  "networkMode": "awsvpc",
+  "executionRoleArn": "${ECS_EXECUTION_ROLE_ARN}",
+  "taskRoleArn": "${ECS_TASK_ROLE_ARN}",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "512",
+  "tags": [
+    {
+      "key": "Service",
+      "value": "project-service"
+    },
+    {
+      "key": "Environment",
+      "value": "${ENV}"
+    }
+  ]
+}
