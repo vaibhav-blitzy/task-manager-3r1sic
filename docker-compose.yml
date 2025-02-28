@@ -1,0 +1,204 @@
+version: '3.8'
+
+services:
+  # API Gateway Service
+  api-gateway:
+    build: 
+      context: ./src/backend/services/api_gateway
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_APP=wsgi.py
+      - FLASK_ENV=development
+    volumes:
+      - ./src/backend/services/api_gateway:/app
+    depends_on:
+      - auth
+      - task
+      - project
+      - notification
+      - file
+      - analytics
+      - realtime
+    networks:
+      - backend
+
+  # Authentication Service
+  auth:
+    build:
+      context: ./src/backend/services/auth
+    environment:
+      - FLASK_APP=wsgi.py
+      - FLASK_ENV=development
+      - MONGODB_URI=mongodb://mongodb:27017/task_management
+      - REDIS_URI=redis://redis:6379/0
+      - JWT_SECRET_KEY=your_jwt_secret_key
+    volumes:
+      - ./src/backend/services/auth:/app
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - backend
+
+  # Task Management Service
+  task:
+    build:
+      context: ./src/backend/services/task
+    environment:
+      - FLASK_APP=wsgi.py
+      - FLASK_ENV=development
+      - MONGODB_URI=mongodb://mongodb:27017/task_management
+      - REDIS_URI=redis://redis:6379/0
+    volumes:
+      - ./src/backend/services/task:/app
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - backend
+
+  # Project Management Service
+  project:
+    build:
+      context: ./src/backend/services/project
+    environment:
+      - FLASK_APP=wsgi.py
+      - FLASK_ENV=development
+      - MONGODB_URI=mongodb://mongodb:27017/task_management
+    volumes:
+      - ./src/backend/services/project:/app
+    depends_on:
+      - mongodb
+    networks:
+      - backend
+
+  # Notification Service
+  notification:
+    build:
+      context: ./src/backend/services/notification
+    environment:
+      - FLASK_APP=wsgi.py
+      - FLASK_ENV=development
+      - MONGODB_URI=mongodb://mongodb:27017/task_management
+      - REDIS_URI=redis://redis:6379/0
+      - EMAIL_SERVICE=smtp
+    volumes:
+      - ./src/backend/services/notification:/app
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - backend
+
+  # File Management Service
+  file:
+    build:
+      context: ./src/backend/services/file
+    environment:
+      - FLASK_APP=wsgi.py
+      - FLASK_ENV=development
+      - MONGODB_URI=mongodb://mongodb:27017/task_management
+      - S3_BUCKET=task-management-files
+      - S3_ENDPOINT=http://minio:9000
+    volumes:
+      - ./src/backend/services/file:/app
+    depends_on:
+      - mongodb
+      - minio
+    networks:
+      - backend
+
+  # Analytics Service
+  analytics:
+    build:
+      context: ./src/backend/services/analytics
+    environment:
+      - FLASK_APP=wsgi.py
+      - FLASK_ENV=development
+      - MONGODB_URI=mongodb://mongodb:27017/task_management
+    volumes:
+      - ./src/backend/services/analytics:/app
+    depends_on:
+      - mongodb
+    networks:
+      - backend
+
+  # Real-time Service
+  realtime:
+    build:
+      context: ./src/backend/services/realtime
+    ports:
+      - "5001:5001"
+    environment:
+      - NODE_ENV=development
+      - REDIS_URI=redis://redis:6379/0
+    volumes:
+      - ./src/backend/services/realtime:/app
+    depends_on:
+      - redis
+    networks:
+      - backend
+
+  # Web Frontend
+  web:
+    build:
+      context: ./src/web
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000/api
+      - REACT_APP_WEBSOCKET_URL=ws://localhost:5001
+    volumes:
+      - ./src/web:/app
+      - /app/node_modules
+    depends_on:
+      - api-gateway
+    networks:
+      - frontend
+      - backend
+
+  # MongoDB Database
+  mongodb:
+    image: mongo:5.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    command: --replSet rs0
+    networks:
+      - backend
+
+  # Redis Cache
+  redis:
+    image: redis:6.2
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - backend
+
+volumes:
+  mongodb_data:
+  redis_data:
+  minio_data:
+
+networks:
+  frontend:
+  backend:
