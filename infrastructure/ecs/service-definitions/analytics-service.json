@@ -1,0 +1,79 @@
+{
+  "cluster": "${cluster_arn}",
+  "serviceName": "analytics-service-${environment}",
+  "taskDefinition": "${taskDefinitionArn}",
+  "desiredCount": 2,
+  "launchType": "FARGATE",
+  "platformVersion": "LATEST",
+  "deploymentConfiguration": {
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    },
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 75
+  },
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": ${privateSubnets},
+      "securityGroups": ${securityGroups},
+      "assignPublicIp": "DISABLED"
+    }
+  },
+  "healthCheckGracePeriodSeconds": 120,
+  "loadBalancers": [
+    {
+      "targetGroupArn": "${target_group_arn}",
+      "containerName": "analytics-service",
+      "containerPort": 8000
+    }
+  ],
+  "serviceRegistries": [
+    {
+      "registryArn": "${service_discovery_arn}",
+      "port": 8000
+    }
+  ],
+  "capacityProviderStrategy": [
+    {
+      "capacityProvider": "FARGATE",
+      "weight": 70,
+      "base": 1
+    },
+    {
+      "capacityProvider": "FARGATE_SPOT",
+      "weight": 30
+    }
+  ],
+  "enableECSManagedTags": true,
+  "propagateTags": "SERVICE",
+  "tags": [
+    {
+      "key": "Name",
+      "value": "analytics-service-${environment}"
+    },
+    {
+      "key": "Environment",
+      "value": "${environment}"
+    },
+    {
+      "key": "Project",
+      "value": "TaskManagementSystem"
+    },
+    {
+      "key": "Component",
+      "value": "Analytics"
+    },
+    {
+      "key": "ManagedBy",
+      "value": "Terraform"
+    }
+  ],
+  "schedulingStrategy": "REPLICA",
+  "enableExecuteCommand": false,
+  "deploymentController": {
+    "type": "ECS"
+  },
+  "placementConstraints": [],
+  "placementStrategy": []
+}
