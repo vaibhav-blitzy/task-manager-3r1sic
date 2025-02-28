@@ -1,0 +1,10 @@
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /tasks/
+Disallow: /projects/
+Disallow: /settings/
+Disallow: /notifications/
+Allow: /auth/login
+Allow: /auth/register
+Allow: /
+Sitemap: https://taskmanagementsystem.com/sitemap.xml
