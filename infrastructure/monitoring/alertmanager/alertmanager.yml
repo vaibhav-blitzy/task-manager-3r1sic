@@ -1,0 +1,157 @@
+# AlertManager Configuration for Task Management System
+# This configuration defines how alerts are routed, grouped, and delivered to recipients
+# based on severity levels and other criteria.
+
+# Templates for custom notification formats
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# The root route on which each incoming alert enters
+route:
+  # The default receiver if no routes match
+  receiver: 'default-receiver'
+  
+  # Group alerts by alertname, cluster, and service to reduce noise
+  group_by: ['alertname', 'cluster', 'service']
+  
+  # Wait 30 seconds to buffer alerts of the same group before sending the first notification
+  group_wait: 30s
+  
+  # After the first notification was sent, wait 5 minutes before sending a batch of new alerts
+  group_interval: 5m
+  
+  # If an alert has been successfully sent, wait 4 hours before resending
+  repeat_interval: 4h
+
+  # Child routes for different severity levels
+  routes:
+    # P1 (Critical) severity alerts - highest priority, requires immediate attention (15 min response time)
+    - match:
+        severity: 'critical'
+      receiver: 'pagerduty-critical'
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 30m  # Repeat more frequently for critical alerts
+      continue: true  # Continue matching subsequent sibling routes
+      
+    # P2 (High) severity alerts - high priority, requires attention within 30 minutes
+    - match:
+        severity: 'high'
+      receiver: 'pagerduty-high'
+      group_wait: 1m
+      group_interval: 10m
+      repeat_interval: 1h
+      continue: true
+      
+    # P3 (Medium) severity alerts - requires attention within 4 hours
+    - match:
+        severity: 'medium'
+      receiver: 'email-slack-medium'
+      group_wait: 2m
+      group_interval: 15m
+      repeat_interval: 4h
+      continue: true
+      
+    # P4 (Low) severity alerts - requires attention within 24 hours
+    - match:
+        severity: 'low'
+      receiver: 'email-low'
+      group_wait: 5m
+      group_interval: 30m
+      repeat_interval: 24h
+
+# Inhibition rules prevent notification spam by suppressing less severe alerts
+# when a more severe alert is already firing for the same service/cluster
+inhibit_rules:
+  # Inhibit all alerts from the same service if there's a critical alert
+  - source_match:
+      severity: 'critical'
+    target_match_re:
+      severity: 'high|medium|low'
+    equal: ['service', 'cluster']
+  
+  # Inhibit low and medium alerts if there's a high severity alert for the same service
+  - source_match:
+      severity: 'high'
+    target_match_re:
+      severity: 'medium|low'
+    equal: ['service', 'cluster']
+
+# Notification receivers define where alerts are sent
+receivers:
+  # Default receiver if no routes match (fallback)
+  - name: 'default-receiver'
+    slack_configs:
+      - channel: '#alerts-general'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}
+{{ end }}'
+
+  # Critical alerts (P1) go to PagerDuty with SMS and phone escalation + Slack
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - service_key: 'PAGERDUTY_SERVICE_KEY_CRITICAL'  # Use secrets management
+        description: '{{ .CommonAnnotations.summary }}'
+        details:
+          firing: '{{ .Alerts.Firing.Labels }}'
+          description: '{{ .CommonAnnotations.description }}'
+          runbook: '{{ .CommonAnnotations.runbook }}'
+        severity: 'critical'
+    slack_configs:
+      - channel: '#alerts-critical'
+        title: '[CRITICAL] {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}*Alert:* {{ .Annotations.summary }}
+*Description:* {{ .Annotations.description }}
+*Severity:* {{ .Labels.severity }}
+*Service:* {{ .Labels.service }}
+*Instance:* {{ .Labels.instance }}
+*Runbook:* {{ .Annotations.runbook }}
+{{ end }}'
+
+  # High severity alerts (P2) go to PagerDuty + Slack
+  - name: 'pagerduty-high'
+    pagerduty_configs:
+      - service_key: 'PAGERDUTY_SERVICE_KEY_HIGH'  # Use secrets management
+        description: '{{ .CommonAnnotations.summary }}'
+        details:
+          firing: '{{ .Alerts.Firing.Labels }}'
+          description: '{{ .CommonAnnotations.description }}'
+          runbook: '{{ .CommonAnnotations.runbook }}'
+        severity: 'high'
+    slack_configs:
+      - channel: '#alerts-high'
+        title: '[HIGH] {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}*Alert:* {{ .Annotations.summary }}
+*Description:* {{ .Annotations.description }}
+*Severity:* {{ .Labels.severity }}
+*Service:* {{ .Labels.service }}
+*Instance:* {{ .Labels.instance }}
+*Runbook:* {{ .Annotations.runbook }}
+{{ end }}'
+
+  # Medium severity alerts (P3) go to Email + Slack
+  - name: 'email-slack-medium'
+    email_configs:
+      - to: 'operations-team@example.com'
+        send_resolved: true
+        headers:
+          Subject: '[MEDIUM] {{ .GroupLabels.alertname }}'
+        html: '{{ template "email.medium.html" . }}'
+    slack_configs:
+      - channel: '#alerts-medium'
+        title: '[MEDIUM] {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}*Alert:* {{ .Annotations.summary }}
+*Description:* {{ .Annotations.description }}
+*Severity:* {{ .Labels.severity }}
+*Service:* {{ .Labels.service }}
+*Instance:* {{ .Labels.instance }}
+{{ end }}'
+
+  # Low severity alerts (P4) go to Email only
+  - name: 'email-low'
+    email_configs:
+      - to: 'monitoring-team@example.com'
+        send_resolved: true
+        headers:
+          Subject: '[LOW] {{ .GroupLabels.alertname }}'
+        html: '{{ template "email.low.html" . }}'
