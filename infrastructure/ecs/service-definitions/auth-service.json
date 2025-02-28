@@ -1,0 +1,88 @@
+{
+  "serviceName": "auth-service",
+  "taskDefinition": "${task_definition_arn}",
+  "cluster": "${cluster_name}",
+  "desiredCount": 4,
+  "launchType": "FARGATE",
+  "deploymentConfiguration": {
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    },
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 100
+  },
+  "deploymentController": {
+    "type": "CODE_DEPLOY"
+  },
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": "${private_subnet_ids}",
+      "securityGroups": ["${security_group_id}"],
+      "assignPublicIp": "DISABLED"
+    }
+  },
+  "healthCheckGracePeriodSeconds": 120,
+  "loadBalancers": [
+    {
+      "targetGroupArn": "${target_group_arn}",
+      "containerName": "auth-service",
+      "containerPort": 8000
+    }
+  ],
+  "serviceRegistries": [
+    {
+      "registryArn": "${service_discovery_arn}",
+      "port": 8000
+    }
+  ],
+  "propagateTags": "SERVICE",
+  "enableECSManagedTags": true,
+  "tags": [
+    {
+      "key": "Service",
+      "value": "auth-service"
+    },
+    {
+      "key": "Environment",
+      "value": "${environment}"
+    },
+    {
+      "key": "Project",
+      "value": "TaskManagementSystem"
+    },
+    {
+      "key": "Classification",
+      "value": "Critical"
+    }
+  ],
+  "enableExecuteCommand": true,
+  "autoScalingConfig": {
+    "minCapacity": 4,
+    "maxCapacity": 12,
+    "targetTrackingPolicies": [
+      {
+        "policyName": "auth-service-cpu-scaling",
+        "targetValue": 70.0,
+        "scaleOutCooldown": 180,
+        "scaleInCooldown": 600,
+        "predefinedMetricType": "ECSServiceAverageCPUUtilization"
+      },
+      {
+        "policyName": "auth-service-memory-scaling",
+        "targetValue": 70.0,
+        "scaleOutCooldown": 180,
+        "scaleInCooldown": 600,
+        "predefinedMetricType": "ECSServiceAverageMemoryUtilization"
+      },
+      {
+        "policyName": "auth-service-request-count-scaling",
+        "targetValue": 300.0,
+        "scaleOutCooldown": 180,
+        "scaleInCooldown": 600,
+        "predefinedMetricType": "ALBRequestCountPerTarget",
+        "resourceLabel": "${target_group_resource_label}"
+      }
+    ]
+  }
+}
