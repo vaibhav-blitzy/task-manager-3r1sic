@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dependency-check 
+    xmlns="https://jeremylong.github.io/DependencyCheck/dependency-check.2.3.xsd"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://jeremylong.github.io/DependencyCheck/dependency-check.2.3.xsd https://jeremylong.github.io/DependencyCheck/dependency-check.2.3.xsd">
+    
+    <!-- General configuration settings -->
+    <scanners>
+        <scanner>dependency-check</scanner>
+        <scanner>retirejs</scanner>
+        <scanner>ossindex</scanner>
+    </scanners>
+    
+    <!-- Output report formats -->
+    <formats>
+        <format>HTML</format>
+        <format>JSON</format>
+        <format>XML</format>
+        <format>CSV</format>
+    </formats>
+    
+    <!-- Suppression file for known false positives -->
+    <suppressionFile>infrastructure/security/dependency-check-suppressions.xml</suppressionFile>
+    
+    <!-- Database update configuration -->
+    <cveValidForHours>24</cveValidForHours>
+    <autoUpdate>true</autoUpdate>
+    
+    <!-- Build failure configuration - fail on CVSS score 7.0 or higher (high severity) -->
+    <failBuildOnCVSS>7.0</failBuildOnCVSS>
+    
+    <!-- Analyzer configurations -->
+    <analyzers>
+        <!-- .NET related analyzers -->
+        <assemblyAnalyzer enabled="true" />
+        <nuspecAnalyzer enabled="true" />
+        
+        <!-- Python related analyzers -->
+        <pyDistributionAnalyzer enabled="true" />
+        <pyPackageAnalyzer enabled="true" />
+        
+        <!-- Ruby related analyzers -->
+        <rubygemsAnalyzer enabled="true" />
+        
+        <!-- JavaScript related analyzers -->
+        <nodeAnalyzer enabled="true" />
+        <npmAnalyzer enabled="true" />
+        
+        <!-- PHP related analyzers -->
+        <composerAnalyzer enabled="true" />
+        
+        <!-- Disable analyzers not needed for this project to improve performance -->
+        <cocoapodsAnalyzer enabled="false" />
+        <swiftPackageManagerAnalyzer enabled="false" />
+        <dartAnalyzer enabled="false" />
+        <golangDepAnalyzer enabled="false" />
+        <golangModAnalyzer enabled="false" />
+    </analyzers>
+    
+    <!-- Additional settings -->
+    <scanTimeout>60</scanTimeout>
+    <jarAnalyzer enabled="false" />
+    <centralAnalyzer enabled="true" />
+    <nexusAnalyzer enabled="false" />
+    <ossIndexAnalyzer enabled="true" />
+    <retireJsAnalyzer enabled="true" />
+    
+    <!-- Advanced settings -->
+    <nvdApiKey><!-- Set this via environment variables instead of hardcoding --></nvdApiKey>
+    <databaseDriverName>org.h2.Driver</databaseDriverName>
+    <databaseDriverPath></databaseDriverPath>
+    <connectionString>jdbc:h2:file:%s;MV_STORE=FALSE;AUTOCOMMIT=ON;LOCK_MODE=0</connectionString>
+    <connectionTimeout>500</connectionTimeout>
+</dependency-check>
