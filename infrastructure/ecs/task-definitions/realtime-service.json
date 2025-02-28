@@ -1,0 +1,126 @@
+{
+  "family": "realtime-service",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/realtime-service-task-role",
+  "networkMode": "awsvpc",
+  "containerDefinitions": [
+    {
+      "name": "realtime-service",
+      "image": "${ECR_REPOSITORY_URI}/realtime-service:${IMAGE_TAG}",
+      "essential": true,
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "PORT",
+          "value": "5000"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "info"
+        },
+        {
+          "name": "MONGODB_URI",
+          "value": "${MONGODB_URI}"
+        },
+        {
+          "name": "REDIS_HOST",
+          "value": "${REDIS_HOST}"
+        },
+        {
+          "name": "REDIS_PORT",
+          "value": "6379"
+        },
+        {
+          "name": "PUBSUB_CHANNEL_PREFIX",
+          "value": "tms:"
+        },
+        {
+          "name": "CONNECTION_TIMEOUT_MS",
+          "value": "30000"
+        },
+        {
+          "name": "PRESENCE_TTL_SECONDS",
+          "value": "60"
+        },
+        {
+          "name": "AUTH_SERVICE_URL",
+          "value": "${AUTH_SERVICE_URL}"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "REDIS_PASSWORD",
+          "valueFrom": "arn:aws:ssm:${AWS_REGION}:${AWS_ACCOUNT_ID}:parameter/realtime-service/redis-password"
+        },
+        {
+          "name": "JWT_PUBLIC_KEY",
+          "valueFrom": "arn:aws:ssm:${AWS_REGION}:${AWS_ACCOUNT_ID}:parameter/jwt/public-key"
+        }
+      ],
+      "portMappings": [
+        {
+          "containerPort": 5000,
+          "hostPort": 5000,
+          "protocol": "tcp"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/realtime-service",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:5000/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "ulimits": [
+        {
+          "name": "nofile",
+          "softLimit": 65536,
+          "hardLimit": 65536
+        }
+      ],
+      "systemControls": [
+        {
+          "namespace": "net.core.somaxconn",
+          "value": "4096"
+        },
+        {
+          "namespace": "net.ipv4.tcp_max_syn_backlog",
+          "value": "4096"
+        }
+      ]
+    }
+  ],
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "2048",
+  "memory": "4096",
+  "tags": [
+    {
+      "key": "Service",
+      "value": "realtime-service"
+    },
+    {
+      "key": "Environment",
+      "value": "${ENVIRONMENT}"
+    },
+    {
+      "key": "Project",
+      "value": "task-management-system"
+    }
+  ]
+}
