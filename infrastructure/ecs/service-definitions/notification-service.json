@@ -1,0 +1,72 @@
+{
+  "serviceName": "notification-service",
+  "cluster": "${ecs_cluster_name}",
+  "taskDefinition": "${task_definition_arn}",
+  "desiredCount": 3,
+  "launchType": "FARGATE",
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": ${private_subnet_ids},
+      "securityGroups": ${security_group_ids},
+      "assignPublicIp": "DISABLED"
+    }
+  },
+  "loadBalancers": [
+    {
+      "targetGroupArn": "${target_group_arn}",
+      "containerName": "notification-service",
+      "containerPort": 8000
+    }
+  ],
+  "deploymentConfiguration": {
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    },
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 80,
+    "deploymentType": "ROLLING",
+    "alarms": {
+      "alarmNames": [
+        "${notification_service_error_alarm_name}",
+        "${notification_service_latency_alarm_name}"
+      ],
+      "enable": true,
+      "rollback": true
+    }
+  },
+  "healthCheckGracePeriodSeconds": 60,
+  "serviceRegistries": [
+    {
+      "registryArn": "${service_discovery_arn}",
+      "port": 8000
+    }
+  ],
+  "schedulingStrategy": "REPLICA",
+  "placementConstraints": [],
+  "placementStrategy": [],
+  "propagateTags": "SERVICE",
+  "enableECSManagedTags": true,
+  "tags": [
+    {
+      "key": "Name",
+      "value": "notification-service"
+    },
+    {
+      "key": "Environment",
+      "value": "${environment}"
+    },
+    {
+      "key": "Project",
+      "value": "TaskManagementSystem"
+    },
+    {
+      "key": "ServiceType",
+      "value": "Supporting"
+    },
+    {
+      "key": "AutoScaling",
+      "value": "QueueDepthBased"
+    }
+  ]
+}
