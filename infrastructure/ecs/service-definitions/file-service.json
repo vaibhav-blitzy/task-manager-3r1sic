@@ -1,0 +1,52 @@
+{
+  "serviceName": "file-service",
+  "cluster": "${cluster_name}",
+  "taskDefinition": "${task_definition_arn}",
+  "launchType": "FARGATE",
+  "desiredCount": 4,
+  "platformVersion": "LATEST",
+  "deploymentConfiguration": {
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    },
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 100
+  },
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": "${jsonencode(private_subnets)}",
+      "securityGroups": ["${security_group_id}"],
+      "assignPublicIp": "DISABLED"
+    }
+  },
+  "loadBalancers": [
+    {
+      "targetGroupArn": "${target_group_arn}",
+      "containerName": "file-service",
+      "containerPort": 8000
+    }
+  ],
+  "serviceRegistries": [
+    {
+      "registryArn": "${service_discovery_arn}"
+    }
+  ],
+  "healthCheckGracePeriodSeconds": 60,
+  "schedulingStrategy": "REPLICA",
+  "enableExecuteCommand": true,
+  "tags": [
+    {
+      "key": "Environment",
+      "value": "${environment}"
+    },
+    {
+      "key": "Project",
+      "value": "TaskManagementSystem"
+    },
+    {
+      "key": "Service",
+      "value": "file-service"
+    }
+  ]
+}
