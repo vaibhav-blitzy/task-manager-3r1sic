@@ -1,0 +1,36 @@
+{
+  "short_name": "TaskMS",
+  "name": "Task Management System",
+  "description": "Comprehensive task and project management system for individuals and teams",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "maskable_icon.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#4F46E5",
+  "background_color": "#F3F4F6",
+  "scope": "/",
+  "orientation": "portrait-primary"
+}
