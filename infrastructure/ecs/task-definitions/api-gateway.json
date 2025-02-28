@@ -1,0 +1,153 @@
+{
+  "family": "api-gateway",
+  "executionRoleArn": "${task_execution_role_arn}",
+  "taskRoleArn": "${task_role_arn}",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "1024",
+  "memory": "2048",
+  "containerDefinitions": [
+    {
+      "name": "api-gateway",
+      "image": "${ecr_repository_url}:${image_tag}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "FLASK_APP",
+          "value": "wsgi:application"
+        },
+        {
+          "name": "FLASK_ENV",
+          "value": "${environment}"
+        },
+        {
+          "name": "MODULE_NAME",
+          "value": "wsgi"
+        },
+        {
+          "name": "VARIABLE_NAME",
+          "value": "application"
+        },
+        {
+          "name": "PORT",
+          "value": "8000"
+        },
+        {
+          "name": "SERVICE_NAME",
+          "value": "api-gateway"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "INFO"
+        },
+        {
+          "name": "CORS_ALLOWED_ORIGINS",
+          "value": "${cors_allowed_origins}"
+        },
+        {
+          "name": "AUTH_SERVICE_HOST",
+          "value": "${auth_service_host}"
+        },
+        {
+          "name": "TASK_SERVICE_HOST",
+          "value": "${task_service_host}"
+        },
+        {
+          "name": "PROJECT_SERVICE_HOST",
+          "value": "${project_service_host}"
+        },
+        {
+          "name": "NOTIFICATION_SERVICE_HOST",
+          "value": "${notification_service_host}"
+        },
+        {
+          "name": "FILE_SERVICE_HOST",
+          "value": "${file_service_host}"
+        },
+        {
+          "name": "ANALYTICS_SERVICE_HOST",
+          "value": "${analytics_service_host}"
+        },
+        {
+          "name": "REALTIME_SERVICE_HOST",
+          "value": "${realtime_service_host}"
+        },
+        {
+          "name": "REDIS_HOST",
+          "value": "${redis_host}"
+        },
+        {
+          "name": "REDIS_PORT",
+          "value": "6379"
+        },
+        {
+          "name": "RATE_LIMIT_DEFAULT",
+          "value": "60/minute"
+        },
+        {
+          "name": "RATE_LIMIT_API",
+          "value": "300/minute"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "JWT_SECRET_KEY",
+          "valueFrom": "${jwt_secret_key_arn}"
+        },
+        {
+          "name": "REDIS_PASSWORD",
+          "valueFrom": "${redis_password_arn}"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/api-gateway",
+          "awslogs-region": "${aws_region}",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:8000/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "ulimits": [
+        {
+          "name": "nofile",
+          "softLimit": 65536,
+          "hardLimit": 65536
+        }
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "key": "Service",
+      "value": "api-gateway"
+    },
+    {
+      "key": "Environment",
+      "value": "${environment}"
+    },
+    {
+      "key": "Project",
+      "value": "TaskManagementSystem"
+    }
+  ]
+}
