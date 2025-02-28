@@ -1,0 +1,98 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'src/web/**'
+      - '.github/workflows/frontend-ci.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'src/web/**'
+      - '.github/workflows/frontend-ci.yml'
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  build-and-test:
+    name: Build and Test Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15  # Prevent hung jobs
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'src/web/package-lock.json'
+      
+      - name: Install dependencies
+        working-directory: src/web
+        run: npm ci
+      
+      - name: Lint code
+        working-directory: src/web
+        run: npm run lint
+      
+      - name: Type check
+        working-directory: src/web
+        run: npm run typecheck
+      
+      - name: Run tests with coverage
+        id: test
+        working-directory: src/web
+        run: |
+          npm run test -- --coverage --ci
+          echo "coverage_report=$(find coverage -type d -name lcov-report -path '*/coverage/lcov-report')" >> $GITHUB_OUTPUT
+      
+      - name: Upload test coverage report
+        if: always() && steps.test.outcome != 'skipped'
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-coverage
+          path: src/web/${{ steps.test.outputs.coverage_report || 'coverage' }}
+          retention-days: 7
+      
+      - name: Build application
+        working-directory: src/web
+        run: npm run build
+      
+      - name: Run security scan
+        working-directory: src/web
+        run: |
+          echo "Running security scan..."
+          npm audit --production --audit-level=high
+        continue-on-error: true
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: src/web/build
+          retention-days: 7
+
+  deploy-to-dev:
+    name: Deploy to Development
+    needs: build-and-test
+    if: success() && github.ref == 'refs/heads/develop' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: development
+    timeout-minutes: 10  # Prevent hung deployments
+    
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend-build
+      
+      - name: Deploy to development environment
+        run: |
+          echo "Deploying to development environment"
+          # This is a placeholder for the actual deployment step
+          # In a real scenario, this would be replaced with commands to
+          # deploy to your development environment
