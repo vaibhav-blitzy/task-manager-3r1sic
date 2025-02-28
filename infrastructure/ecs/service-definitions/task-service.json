@@ -1,0 +1,69 @@
+{
+  "serviceName": "task-service",
+  "cluster": "${cluster_name}",
+  "taskDefinition": "task-service",
+  "desiredCount": 6,
+  "launchType": "FARGATE",
+  "platformVersion": "LATEST",
+  "deploymentConfiguration": {
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    },
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 100
+  },
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": [
+        "${private_subnet_1}",
+        "${private_subnet_2}"
+      ],
+      "securityGroups": [
+        "${task_service_security_group}"
+      ],
+      "assignPublicIp": "DISABLED"
+    }
+  },
+  "loadBalancers": [
+    {
+      "targetGroupArn": "${task_service_target_group_arn}",
+      "containerName": "task-service",
+      "containerPort": 8000
+    }
+  ],
+  "healthCheckGracePeriodSeconds": 60,
+  "serviceRegistries": [
+    {
+      "registryArn": "${task_service_service_discovery_arn}"
+    }
+  ],
+  "schedulingStrategy": "REPLICA",
+  "deploymentController": {
+    "type": "CODE_DEPLOY"
+  },
+  "enableECSManagedTags": true,
+  "propagateTags": "SERVICE",
+  "tags": [
+    {
+      "key": "Environment",
+      "value": "${environment}"
+    },
+    {
+      "key": "Service",
+      "value": "task-service"
+    },
+    {
+      "key": "Component",
+      "value": "Core"
+    }
+  ],
+  "enableExecuteCommand": true,
+  "capacityProviderStrategy": [
+    {
+      "capacityProvider": "FARGATE",
+      "weight": 1,
+      "base": 6
+    }
+  ]
+}
