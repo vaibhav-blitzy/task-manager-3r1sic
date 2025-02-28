@@ -1,0 +1,135 @@
+[build-system]
+requires = ["poetry-core>=1.5.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "task-management-system-backend"
+version = "1.0.0"
+description = "Comprehensive microservice-based backend for the Task Management System using Flask, MongoDB, and Redis"
+authors = ["Task Management System Team <team@taskmanagementsystem.com>"]
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/taskmanagementsystem/backend"
+packages = [
+    { include = "src" }
+]
+
+[tool.poetry.dependencies]
+Flask = "2.3.3"
+Flask-RESTful = "0.3.10"
+Flask-SocketIO = "5.3.4"
+Flask-JWT-Extended = "4.5.2"
+Flask-Migrate = "4.0.4"
+Flask-CORS = "3.0.10"
+Flask-SQLAlchemy = "3.0.3"
+Flask-PyMongo = "2.3.0"
+Werkzeug = "2.3.7"
+pymongo = "4.3.3"
+mongoengine = "0.27.0"
+redis = "4.3.6"
+SQLAlchemy = "2.0.20"
+celery = "5.3.1"
+PyJWT = "2.6.0"
+bcrypt = "4.0.1"
+passlib = "1.7.4"
+cryptography = "38.0.4"
+pyotp = "2.8.0"
+pydantic = "1.10.8"
+marshmallow = "3.19.0"
+jsonschema = "4.19.0"
+boto3 = "1.28.40"
+requests = "2.28.2"
+python-dateutil = "2.8.2"
+pytz = "2023.3"
+python-dotenv = "0.21.1"
+gunicorn = "20.1.0"
+uvicorn = "0.23.2"
+eventlet = "0.33.3"
+python-socketio = "5.8.0"
+sendgrid = "6.9.7"
+jinja2 = "3.1.2"
+Pillow = "10.0.0"
+python-magic = "0.4.27"
+backoff = "2.2.1"
+pybreaker = "1.2.0"
+prometheus-client = "0.16.0"
+opentelemetry-api = "1.19.0"
+opentelemetry-sdk = "1.19.0"
+opentelemetry-exporter-jaeger = "1.19.0"
+opentelemetry-instrumentation-flask = "0.40b0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "7.4.0"
+pytest-flask = "1.2.0"
+pytest-mock = "3.11.1"
+pytest-cov = "4.1.0"
+pytest-xdist = "3.3.1"
+black = "23.3.0"
+isort = "5.12.0"
+flake8 = "6.0.0"
+mypy = "1.3.0"
+faker = "19.6.1"
+mongomock = "4.1.2"
+fakeredis = "2.10.3"
+requests-mock = "1.11.0"
+
+[tool.poetry.scripts]
+start = "python -m src.backend.scripts.run_services"
+test = "pytest"
+lint = "flake8 src tests"
+format = "black src tests && isort src tests"
+type-check = "mypy src"
+create-service = "python -m src.backend.scripts.create_service"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+include = "\\.(py)$"
+exclude = "/(\\.git|\\.venv|venv|node_modules)/"
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+
+[tool.flake8]
+max-line-length = 100
+extend-ignore = ["E203", "E501"]
+exclude = [".git", "__pycache__", "build", "dist", ".venv", "venv"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+strict_optional = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest]
+testpaths = ["tests", "services"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "--strict-markers --cov=. --cov-report=term --cov-report=html --cov-fail-under=85 -v"
+norecursedirs = ["node_modules", "venv", ".git"]
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+[tool.pytest.ini_options]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "performance: Performance tests",
+    "api: API tests",
+    "slow: Slow running tests"
+]
