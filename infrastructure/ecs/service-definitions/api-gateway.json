@@ -1,0 +1,84 @@
+{
+  "serviceName": "api-gateway",
+  "taskDefinition": "${task_definition_arn}",
+  "cluster": "${cluster_name}",
+  "desiredCount": 4,
+  "launchType": "FARGATE",
+  "deploymentConfiguration": {
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    },
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 100
+  },
+  "deploymentController": {
+    "type": "CODE_DEPLOY"
+  },
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": "${private_subnet_ids}",
+      "securityGroups": ["${security_group_id}"],
+      "assignPublicIp": "DISABLED"
+    }
+  },
+  "healthCheckGracePeriodSeconds": 120,
+  "loadBalancers": [
+    {
+      "targetGroupArn": "${target_group_arn}",
+      "containerName": "api-gateway",
+      "containerPort": 8000
+    }
+  ],
+  "serviceRegistries": [
+    {
+      "registryArn": "${service_discovery_arn}",
+      "port": 8000
+    }
+  ],
+  "propagateTags": "SERVICE",
+  "enableECSManagedTags": true,
+  "tags": [
+    {
+      "key": "Service",
+      "value": "api-gateway"
+    },
+    {
+      "key": "Environment",
+      "value": "${environment}"
+    },
+    {
+      "key": "Project",
+      "value": "TaskManagementSystem"
+    }
+  ],
+  "enableExecuteCommand": true,
+  "autoScalingConfig": {
+    "minCapacity": 4,
+    "maxCapacity": 12,
+    "targetTrackingPolicies": [
+      {
+        "policyName": "api-gateway-cpu-scaling",
+        "targetValue": 80.0,
+        "scaleOutCooldown": 180,
+        "scaleInCooldown": 600,
+        "predefinedMetricType": "ECSServiceAverageCPUUtilization"
+      },
+      {
+        "policyName": "api-gateway-memory-scaling",
+        "targetValue": 75.0,
+        "scaleOutCooldown": 180,
+        "scaleInCooldown": 600,
+        "predefinedMetricType": "ECSServiceAverageMemoryUtilization"
+      },
+      {
+        "policyName": "api-gateway-request-count-scaling",
+        "targetValue": 500.0,
+        "scaleOutCooldown": 180,
+        "scaleInCooldown": 600,
+        "predefinedMetricType": "ALBRequestCountPerTarget",
+        "resourceLabel": "${target_group_resource_label}"
+      }
+    ]
+  }
+}
