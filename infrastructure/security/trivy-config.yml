@@ -1,0 +1,78 @@
+# Trivy Scanner Configuration
+# Version: 1.0.0
+# Purpose: Configure vulnerability scanning for container images in the CI/CD pipeline
+# This configuration enforces zero critical or high vulnerabilities in production images
+
+# Severity levels to check for (CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN)
+# We're scanning for CRITICAL and HIGH vulnerabilities only as these must be addressed
+severity: "CRITICAL,HIGH"
+
+# Skip vulnerabilities with no available fix
+# This prevents failing builds for issues that cannot yet be remediated
+ignore-unfixed: true
+
+# Output format (table, json, template)
+format: "json"
+
+# File to save the results to
+output: "trivy-results.json"
+
+# Exit code when vulnerabilities are found
+# 0: Exit with code 0 even when vulnerabilities are found
+# 1: Exit with code 1 when vulnerabilities are found
+exit-code: 1
+
+# Scan timeout (default 5 minutes)
+timeout: "10m"
+
+# File containing vulnerabilities to be ignored
+# Format: CVE-ID or vulnerability ID per line with optional comments
+ignore-file: ".trivyignore"
+
+# Vulnerability scanning options
+vulnerability:
+  # Scan for vulnerabilities in OS packages and language-specific dependencies
+  type: ["os", "library"]
+  
+  # Only report vulnerabilities that were fixed in newer versions
+  report-unpatched: false
+
+# Cache settings
+cache:
+  # Use cached vulnerability database
+  enabled: true
+  
+  # Age of the cache before updating
+  ttl: "24h"
+
+# Miscellaneous options
+misc:
+  # Skip dev dependencies during scanning (for Node.js, PHP, Ruby, Python)
+  skip-dev-dependencies: true
+  
+  # Maximum number of threads to use for vulnerability scanning
+  parallel: 5
+  
+  # Debugging mode (set to true for troubleshooting)
+  debug: false
+  
+  # Insecure SSL (not recommended for production use)
+  insecure: false
+
+# Enable GitHub Security Advisory database scanning
+vuln-type: "os,library"
+
+# Specify security checks to run
+security-checks: "vuln,config,secret"
+
+# Skip specified files during scanning
+skip-files:
+  - "**/*test*"
+  - "**/*example*"
+  - "**/node_modules/*"
+
+# Skip specified directories during scanning
+skip-dirs:
+  - "tests"
+  - "examples"
+  - ".git"
