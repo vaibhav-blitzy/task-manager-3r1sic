@@ -1,0 +1,430 @@
+# Prometheus Configuration for Task Management System
+# This file defines the global settings, alerting configurations, and scrape jobs
+# for monitoring all services and infrastructure components of the Task Management System.
+
+# Global settings for Prometheus
+global:
+  # How frequently to scrape targets by default (can be overridden per job)
+  scrape_interval: 15s
+  # How frequently to evaluate rules by default
+  evaluation_interval: 15s
+  # How long until a scrape request times out
+  scrape_timeout: 10s
+  # Labels to add to any time series or alerts when communicating with
+  # external systems (federation, remote storage, AlertManager)
+  external_labels:
+    environment: 'production'
+    region: 'us-east-1'
+    system: 'task-management-system'
+
+# Alertmanager configuration
+# AlertManager handles the routing, grouping, and delivery of alerts
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - 'alertmanager:9093'  # AlertManager service endpoint
+      # How long to wait for AlertManager to become available during Prometheus startup
+      timeout: 10s
+      # Use v2 of the AlertManager API
+      api_version: v2
+
+# Rule files contain recording rules and alerting rules
+# Recording rules pre-compute frequently needed or computationally expensive expressions
+# Alerting rules define alert conditions based on PromQL expressions
+rule_files:
+  # System and infrastructure alert rules
+  - '/etc/prometheus/rules/system_alerts.yml'
+  # Service-specific alert rules
+  - '/etc/prometheus/rules/service_alerts.yml'
+  # Business metrics alert rules
+  - '/etc/prometheus/rules/business_alerts.yml'
+  # SLA-based alert rules
+  - '/etc/prometheus/rules/sla_alerts.yml'
+  # Recording rules for optimizing common queries
+  - '/etc/prometheus/rules/recording_rules.yml'
+
+# Scrape configurations for monitoring various services and components
+scrape_configs:
+  ##############################################
+  # SELF-MONITORING
+  ##############################################
+  
+  # Self-monitoring of Prometheus
+  - job_name: 'prometheus'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'monitoring'
+          component: 'prometheus'
+
+  # AlertManager metrics
+  - job_name: 'alertmanager'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['alertmanager:9093']
+        labels:
+          service: 'monitoring'
+          component: 'alertmanager'
+
+  ##############################################
+  # CORE APPLICATION SERVICES
+  ##############################################
+  
+  # API Gateway metrics - the entry point for all client requests
+  - job_name: 'api-gateway'
+    # Scrape more frequently due to high traffic and importance
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['api-gateway:9091']
+        labels:
+          service: 'api-gateway'
+          tier: 'frontend'
+          criticality: 'high'
+
+  # Authentication Service metrics - handles user identity and access control
+  - job_name: 'auth-service'
+    # Critical service with high security importance
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['auth-service:9092']
+        labels:
+          service: 'auth-service'
+          tier: 'core'
+          criticality: 'critical'
+
+  # Task Management Service metrics - core business functionality
+  - job_name: 'task-service'
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['task-service:9093']
+        labels:
+          service: 'task-service'
+          tier: 'core'
+          criticality: 'high'
+
+  # Project Management Service metrics
+  - job_name: 'project-service'
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['project-service:9094']
+        labels:
+          service: 'project-service'
+          tier: 'core'
+          criticality: 'high'
+
+  # Notification Service metrics
+  - job_name: 'notification-service'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['notification-service:9095']
+        labels:
+          service: 'notification-service'
+          tier: 'support'
+          criticality: 'medium'
+
+  # File Management Service metrics
+  - job_name: 'file-service'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['file-service:9096']
+        labels:
+          service: 'file-service'
+          tier: 'support'
+          criticality: 'medium'
+
+  # Analytics Service metrics
+  - job_name: 'analytics-service'
+    # Less frequent scraping for non-critical reporting service
+    scrape_interval: 30s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['analytics-service:9097']
+        labels:
+          service: 'analytics-service'
+          tier: 'support'
+          criticality: 'low'
+
+  # Real-time Collaboration Service metrics
+  - job_name: 'realtime-service'
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['realtime-service:9098']
+        labels:
+          service: 'realtime-service'
+          tier: 'core'
+          criticality: 'high'
+
+  ##############################################
+  # DATA STORES AND CACHES
+  ##############################################
+  
+  # MongoDB metrics (using mongodb_exporter)
+  - job_name: 'mongodb'
+    scrape_interval: 30s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['mongodb-exporter:9216']
+        labels:
+          service: 'database'
+          component: 'mongodb'
+          tier: 'data'
+          criticality: 'critical'
+
+  # MongoDB replication metrics for replica set monitoring
+  - job_name: 'mongodb-replication'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    params:
+      metrics: ['replicaset']
+    static_configs:
+      - targets: ['mongodb-exporter:9216']
+        labels:
+          service: 'database'
+          component: 'mongodb-replication'
+          tier: 'data'
+          criticality: 'critical'
+  
+  # Redis metrics (using redis_exporter)
+  - job_name: 'redis'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'cache'
+          component: 'redis'
+          tier: 'data'
+          criticality: 'high'
+
+  # Redis replication and cluster metrics
+  - job_name: 'redis-replication'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    params:
+      check-keys: ['session:*']
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'cache'
+          component: 'redis-replication'
+          tier: 'data'
+          criticality: 'high'
+
+  # S3 metrics via CloudWatch exporter
+  - job_name: 's3'
+    scrape_interval: 60s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['cloudwatch-exporter:9106']
+        labels:
+          service: 'storage'
+          component: 's3'
+          tier: 'data'
+          criticality: 'high'
+  
+  ##############################################
+  # SYSTEM AND INFRASTRUCTURE
+  ##############################################
+  
+  # Node metrics for host systems
+  - job_name: 'node-exporter'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'infrastructure'
+          component: 'node'
+          tier: 'system'
+          criticality: 'high'
+
+  # Container metrics (cAdvisor)
+  - job_name: 'cadvisor'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: 'infrastructure'
+          component: 'container'
+          tier: 'system'
+          criticality: 'high'
+
+  # AWS EC2 instance discovery for auto-scaling groups
+  - job_name: 'ec2-discovery'
+    scrape_interval: 30s
+    metrics_path: '/metrics'
+    ec2_sd_configs:
+      - region: 'us-east-1'
+        port: 9100  # Default node-exporter port
+        refresh_interval: 60s  # How often to refresh the target list
+        filters:
+          - name: 'tag:Environment'
+            values: ['production']
+          - name: 'tag:Project'
+            values: ['task-management-system']
+    relabel_configs:
+      - source_labels: [__meta_ec2_tag_Name]
+        target_label: instance_name
+      - source_labels: [__meta_ec2_tag_Service]
+        target_label: service
+      - source_labels: [__meta_ec2_tag_Role]
+        target_label: role
+      - source_labels: [__meta_ec2_availability_zone]
+        target_label: zone
+      - source_labels: [__meta_ec2_instance_type]
+        target_label: instance_type
+
+  # ECS service discovery for container monitoring
+  - job_name: 'ecs-discovery'
+    scrape_interval: 30s
+    ecs_sd_configs:
+      - region: 'us-east-1'
+        refresh_interval: 60s
+    relabel_configs:
+      - source_labels: [__meta_ecs_task_definition_family]
+        target_label: task_family
+      - source_labels: [__meta_ecs_container_name]
+        target_label: container_name
+      - source_labels: [__meta_ecs_cluster_name]
+        target_label: cluster_name
+      - source_labels: [__meta_ecs_task_definition_revision]
+        target_label: task_revision
+
+  # AWS CloudWatch metrics via exporter
+  - job_name: 'cloudwatch'
+    scrape_interval: 60s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['cloudwatch-exporter:9106']
+        labels:
+          service: 'monitoring'
+          component: 'cloudwatch'
+          tier: 'system'
+          criticality: 'medium'
+  
+  ##############################################
+  # FRONTEND AND USER EXPERIENCE
+  ##############################################
+
+  # Frontend application monitoring (client-side metrics)
+  - job_name: 'frontend'
+    scrape_interval: 30s
+    metrics_path: '/metrics'
+    scheme: 'https'
+    static_configs:
+      - targets: ['frontend-metrics-collector:9103']
+        labels:
+          service: 'frontend'
+          component: 'web-app'
+          tier: 'frontend'
+          criticality: 'high'
+
+  ##############################################
+  # SLA AND SYNTHETIC MONITORING
+  ##############################################
+
+  # Blackbox exporter for endpoint probing (SLA monitoring)
+  - job_name: 'blackbox'
+    metrics_path: '/probe'
+    params:
+      module: [http_2xx]  # Look for a HTTP 200 response
+    static_configs:
+      - targets:
+        # Main application health checks
+        - 'https://app.taskmanagementsystem.com/health'
+        - 'https://api.taskmanagementsystem.com/health'
+        # Critical service endpoints
+        - 'https://api.taskmanagementsystem.com/auth/health'
+        - 'https://api.taskmanagementsystem.com/tasks/health'
+        - 'https://api.taskmanagementsystem.com/projects/health'
+        # Support service endpoints
+        - 'https://api.taskmanagementsystem.com/notifications/health'
+        - 'https://api.taskmanagementsystem.com/files/health'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 'blackbox-exporter:9115'  # The blackbox exporter's address
+      # Classify endpoints by service category
+      - source_labels: [__param_target]
+        regex: '.*\/auth\/.*'
+        target_label: service
+        replacement: 'auth-service'
+      - source_labels: [__param_target]
+        regex: '.*\/tasks\/.*'
+        target_label: service
+        replacement: 'task-service'
+      - source_labels: [__param_target]
+        regex: '.*\/projects\/.*'
+        target_label: service
+        replacement: 'project-service'
+      # Add appropriate criticality
+      - source_labels: [service]
+        regex: '(auth-service|task-service|project-service)'
+        target_label: criticality
+        replacement: 'high'
+      - source_labels: [service]
+        regex: '(notification-service|file-service)'
+        target_label: criticality
+        replacement: 'medium'
+
+  # Synthetic transaction monitoring for critical user flows
+  - job_name: 'synthetic-monitoring'
+    scrape_interval: 60s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['synthetic-monitor:9104']
+        labels:
+          service: 'user-experience'
+          component: 'synthetic-flows'
+          tier: 'monitoring'
+          criticality: 'high'
+
+  ##############################################
+  # THIRD-PARTY DEPENDENCIES
+  ##############################################
+
+  # External service health monitoring
+  - job_name: 'external-services'
+    metrics_path: '/probe'
+    params:
+      module: [http_2xx]  # Look for a HTTP 200 response
+    static_configs:
+      - targets:
+        - 'https://auth0.com/api/health'      # Auth0 status
+        - 'https://api.sendgrid.com/health'   # SendGrid status
+        - 'https://status.aws.amazon.com'     # AWS status
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 'blackbox-exporter:9115'  # The blackbox exporter's address
+      # Identify dependency type
+      - source_labels: [__param_target]
+        regex: '.*auth0.*'
+        target_label: dependency
+        replacement: 'authentication'
+      - source_labels: [__param_target]
+        regex: '.*sendgrid.*'
+        target_label: dependency
+        replacement: 'email'
+      - source_labels: [__param_target]
+        regex: '.*aws.*'
+        target_label: dependency
+        replacement: 'cloud-provider'
