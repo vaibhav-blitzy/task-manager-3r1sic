@@ -1,0 +1,225 @@
+# Custom Falco Security Rules for Task Management System
+# Extends default Falco rules with application-specific policies
+
+# Global Lists and Macros
+# ------------------------------
+
+# List of allowed containers
+- list: allowed_containers
+  items:
+    - auth-service:latest
+    - task-service:latest
+    - project-service:latest
+    - notification-service:latest
+    - file-service:latest
+    - analytics-service:latest
+    - realtime-service:latest
+
+# List of authorized network endpoints
+- list: authorized_network_endpoints
+  items:
+    - mongodb:27017
+    - redis:6379
+    - auth-service:8000
+    - task-service:8000
+    - project-service:8000
+    - notification-service:8000
+    - file-service:8000
+    - analytics-service:8000
+    - realtime-service:8000
+
+# Sensitive file paths
+- list: sensitive_file_paths
+  items:
+    - /etc/secrets/
+    - /var/run/secrets/
+    - /app/config/.env
+    - /app/infrastructure/security/
+
+# Service network mapping (defines which services can communicate with each other)
+- macro: auth_service_allowed_comms
+  condition: (container.image.repository = "auth-service" and (fd.name contains "redis" or fd.name contains "mongodb"))
+
+- macro: task_service_allowed_comms
+  condition: (container.image.repository = "task-service" and (fd.name contains "mongodb" or fd.name contains "redis" or fd.name contains "notification-service" or fd.name contains "file-service"))
+
+- macro: project_service_allowed_comms
+  condition: (container.image.repository = "project-service" and (fd.name contains "mongodb" or fd.name contains "task-service"))
+
+- macro: notification_service_allowed_comms
+  condition: (container.image.repository = "notification-service" and (fd.name contains "redis" or fd.name contains "mongodb"))
+
+- macro: file_service_allowed_comms
+  condition: (container.image.repository = "file-service" and (fd.name contains "mongodb" or fd.name contains "s3"))
+
+- macro: analytics_service_allowed_comms
+  condition: (container.image.repository = "analytics-service" and (fd.name contains "mongodb" or fd.name contains "redis"))
+
+- macro: realtime_service_allowed_comms
+  condition: (container.image.repository = "realtime-service" and (fd.name contains "redis"))
+
+# Map alert priorities to notification channels
+- macro: critical_alert
+  condition: (evt.time.hour >= 0)
+  output: "PagerDuty"
+
+- macro: warning_alert
+  condition: (evt.time.hour >= 0)
+  output: "Slack"
+
+- macro: info_alert
+  condition: (evt.time.hour >= 0)
+  output: "CloudWatch"
+
+# Rule Collections
+# ------------------------------
+
+# 1. Container Security Rules
+- rule: unauthorized_container_execution
+  desc: Detect execution of unauthorized containers
+  condition: spawned_process and container and not container.image.repository in (allowed_containers)
+  output: "Unauthorized container detected (user=%user.name container=%container.image.repository command=%proc.cmdline)"
+  priority: CRITICAL
+  tags: [container_security_rules, security, tms]
+
+- rule: privileged_container_detection
+  desc: Detect privileged container execution
+  condition: spawned_process and container and container.privileged=true
+  output: "Privileged container detected (user=%user.name container=%container.image.repository)"
+  priority: WARNING
+  tags: [container_security_rules, security, tms]
+
+- rule: container_escape_attempt
+  desc: Detect potential container escape attempts
+  condition: >
+    spawned_process and container and
+    (proc.name = "unshare" or proc.name = "nsenter" or proc.name = "chroot" or
+     proc.cmdline contains "capability" or proc.cmdline contains "devices.allow")
+  output: "Potential container escape attempt (user=%user.name container=%container.image.repository command=%proc.cmdline)"
+  priority: CRITICAL
+  tags: [container_security_rules, security, tms, escape]
+
+# 2. Network Security Rules
+- rule: unauthorized_network_connection
+  desc: Detect unauthorized network connections to/from containers
+  condition: >
+    spawned_process and container and outbound and
+    not (fd.name in (authorized_network_endpoints) or fd.sport in (80, 443))
+  output: "Unauthorized network connection (user=%user.name container=%container.image.repository connection=%fd.name:%fd.sport)"
+  priority: WARNING
+  tags: [network_security_rules, security, tms]
+
+- rule: service_communication_violation
+  desc: Detect violations of service communication policies
+  condition: >
+    spawned_process and container and outbound and
+    not (auth_service_allowed_comms or task_service_allowed_comms or project_service_allowed_comms or 
+    notification_service_allowed_comms or file_service_allowed_comms or analytics_service_allowed_comms or
+    realtime_service_allowed_comms)
+  output: "Service communication policy violation (source=%container.image.repository target=%fd.name)"
+  priority: WARNING
+  tags: [network_security_rules, security, tms, communication]
+
+- rule: suspicious_outbound_connection
+  desc: Detect suspicious outbound connections to known bad IPs or domains
+  condition: >
+    spawned_process and container and outbound and 
+    (fd.sip="1.2.3.4" or fd.name contains "evil-domain.com")
+  output: "Suspicious outbound connection detected (container=%container.image.repository target=%fd.name)"
+  priority: CRITICAL
+  tags: [network_security_rules, security, tms, threat]
+
+# 3. Data Access Rules
+- rule: sensitive_file_access
+  desc: Detect access to sensitive configuration files
+  condition: >
+    (open_read or open_write) and container and
+    (fd.name startswith "/etc/secrets/" or fd.name startswith "/var/run/secrets/" or 
+     fd.name startswith "/app/config/.env" or fd.name startswith "/app/infrastructure/security/")
+  output: "Sensitive file accessed (user=%user.name container=%container.image.repository file=%fd.name)"
+  priority: WARNING
+  tags: [data_access_rules, security, tms]
+
+- rule: mongodb_unauthorized_access
+  desc: Detect unauthorized access to MongoDB
+  condition: >
+    spawned_process and container and outbound and fd.sport=27017 and
+    not (container.image.repository in (allowed_containers))
+  output: "Unauthorized MongoDB access (user=%user.name container=%container.image.repository)"
+  priority: WARNING
+  tags: [data_access_rules, security, tms, mongodb]
+
+- rule: redis_unauthorized_access
+  desc: Detect unauthorized access to Redis
+  condition: >
+    spawned_process and container and outbound and fd.sport=6379 and
+    not (container.image.repository in (allowed_containers))
+  output: "Unauthorized Redis access (user=%user.name container=%container.image.repository)"
+  priority: WARNING
+  tags: [data_access_rules, security, tms, redis]
+
+# 4. Privilege Escalation Rules
+- rule: shell_execution_in_container
+  desc: Detect shell execution in containers
+  condition: >
+    spawned_process and container and 
+    (proc.name = "sh" or proc.name = "bash" or proc.name = "ash" or proc.name = "dash" or proc.name = "zsh")
+  output: "Shell execution detected in container (user=%user.name container=%container.image.repository shell=%proc.cmdline)"
+  priority: WARNING
+  tags: [privilege_escalation_rules, security, tms, shell]
+
+- rule: suspicious_binary_execution
+  desc: Detect execution of suspicious binaries
+  condition: >
+    spawned_process and container and
+    (proc.name = "nc" or proc.name = "ncat" or proc.name = "nmap" or proc.name = "wget" or proc.name = "curl" or
+     proc.name = "socat" or proc.name = "tcpdump" or proc.name = "wireshark" or proc.name = "tshark")
+  output: "Suspicious binary execution in container (user=%user.name container=%container.image.repository command=%proc.cmdline)"
+  priority: WARNING
+  tags: [privilege_escalation_rules, security, tms, binary]
+
+- rule: process_manipulation
+  desc: Detect process manipulation attempts
+  condition: >
+    spawned_process and container and
+    (proc.name = "ptrace" or proc.name = "gdb" or proc.name = "strace" or proc.cmdline contains "PTRACE")
+  output: "Process manipulation attempt detected (user=%user.name container=%container.image.repository command=%proc.cmdline)"
+  priority: CRITICAL
+  tags: [privilege_escalation_rules, security, tms, manipulation]
+
+# 5. Service-Specific Rules
+- rule: auth_service_anomaly
+  desc: Detect anomalous behavior in authentication service
+  condition: >
+    spawned_process and container and container.image.repository = "auth-service" and
+    not proc.name in ("python", "python3", "gunicorn", "uvicorn", "node")
+  output: "Anomalous process in auth service (user=%user.name command=%proc.cmdline)"
+  priority: WARNING
+  tags: [service_specific_rules, security, tms, auth]
+
+- rule: file_service_data_exfiltration
+  desc: Detect potential data exfiltration from file service
+  condition: >
+    spawned_process and container and container.image.repository = "file-service" and
+    outbound and not fd.name in (authorized_network_endpoints) and evt.buffer contains "GET" and evt.buffer contains "file"
+  output: "Potential data exfiltration from file service (user=%user.name target=%fd.name command=%proc.cmdline)"
+  priority: CRITICAL
+  tags: [service_specific_rules, security, tms, exfiltration]
+
+- rule: task_service_tampering
+  desc: Detect potential tampering with task service data
+  condition: >
+    spawned_process and container and container.image.repository = "task-service" and
+    (evt.buffer contains "DELETE FROM" or evt.buffer contains "DROP TABLE")
+  output: "Potential task service data tampering (user=%user.name command=%proc.cmdline)"
+  priority: CRITICAL
+  tags: [service_specific_rules, security, tms, data-tampering]
+
+- rule: analytics_service_data_theft
+  desc: Detect potential data theft from analytics service
+  condition: >
+    spawned_process and container and container.image.repository = "analytics-service" and
+    outbound and not fd.name in (authorized_network_endpoints) and evt.buffer contains "SELECT" and evt.buffer contains "data"
+  output: "Potential data theft from analytics service (user=%user.name target=%fd.name command=%proc.cmdline)"
+  priority: CRITICAL
+  tags: [service_specific_rules, security, tms, data-theft]
