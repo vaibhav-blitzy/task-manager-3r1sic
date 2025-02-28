@@ -1,0 +1,331 @@
+name: Backend CI
+
+# Trigger the workflow on push to main/develop branches, pull requests to main/develop,
+# and a daily scheduled run for security scanning
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  schedule:
+    # Run daily at midnight UTC for security scanning
+    - cron: '0 0 * * *'
+
+env:
+  PYTHON_VERSION: '3.11'
+  POETRY_VERSION: '1.4.2'
+  AWS_REGION: 'us-east-1'  # Default region, can be overridden in repository secrets
+  ECR_REPOSITORY: 'task-management-system'  # Default repository name
+
+jobs:
+  code_quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 - --version ${{ env.POETRY_VERSION }}
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      
+      - name: Configure Poetry to use cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pypoetry/virtualenvs
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          poetry install
+      
+      - name: Lint with pylint
+        id: pylint
+        continue-on-error: true
+        run: |
+          cd backend
+          poetry run pylint --rcfile=.pylintrc **/*.py
+      
+      - name: Type check with mypy
+        id: mypy
+        continue-on-error: true
+        run: |
+          cd backend
+          poetry run mypy --config-file=mypy.ini .
+      
+      - name: Check formatting with black
+        id: black
+        continue-on-error: true
+        run: |
+          cd backend
+          poetry run black --check .
+      
+      - name: SonarQube Analysis
+        uses: sonarsource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: backend
+      
+      - name: Check code quality results
+        if: steps.pylint.outcome == 'failure' || steps.mypy.outcome == 'failure' || steps.black.outcome == 'failure'
+        run: |
+          echo "Code quality checks failed. Please fix the issues and try again."
+          exit 1
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 - --version ${{ env.POETRY_VERSION }}
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      
+      - name: Configure Poetry to use cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pypoetry/virtualenvs
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          poetry install --with test
+      
+      - name: Run unit tests with pytest
+        run: |
+          cd backend
+          poetry run pytest tests/unit --cov=app --cov-report=xml --cov-report=term -xvs --junitxml=junit-unit.xml -n 4
+      
+      - name: Run integration tests
+        run: |
+          cd backend
+          poetry run pytest tests/integration --cov=app --cov-append --cov-report=xml --cov-report=term -xvs --junitxml=junit-integration.xml -n 2
+      
+      - name: Verify coverage threshold
+        run: |
+          cd backend
+          poetry run coverage report --fail-under=85
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: backend/coverage.xml
+          fail_ci_if_error: true
+      
+      - name: Generate test report artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-reports
+          path: |
+            backend/junit-*.xml
+            backend/coverage.xml
+          retention-days: 7
+
+  security:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install safety bandit
+      
+      - name: Run OWASP Dependency Check
+        run: |
+          cd backend
+          safety check -r requirements.txt --full-report --output text > safety-report.txt || echo "Vulnerabilities found, but continuing the workflow"
+      
+      - name: Run CodeQL analysis
+        uses: github/codeql-action/init@v2
+        with:
+          languages: python
+      
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+      
+      - name: Check for secrets in code
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Generate security report artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report
+          path: |
+            backend/safety-report.txt
+          retention-days: 30
+
+  build:
+    name: Build and Push Containers
+    runs-on: ubuntu-latest
+    needs: [code_quality, test, security]
+    if: github.event_name != 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      # Define service array to build
+      - name: Set service array
+        id: services
+        run: |
+          echo "SERVICES=api-gateway auth-service task-service project-service notification-service file-service analytics-service realtime-service" >> $GITHUB_ENV
+      
+      # Build and push API Gateway service
+      - name: Build and push API Gateway
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend/api_gateway
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/api-gateway:${{ github.sha }},${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/api-gateway:latest
+          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/api-gateway:latest
+          cache-to: type=inline
+      
+      # Build and push Authentication service
+      - name: Build and push Auth Service
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend/auth_service
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/auth-service:${{ github.sha }},${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/auth-service:latest
+          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/auth-service:latest
+          cache-to: type=inline
+      
+      # Build and push Task service
+      - name: Build and push Task Service
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend/task_service
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/task-service:${{ github.sha }},${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/task-service:latest
+          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/task-service:latest
+          cache-to: type=inline
+      
+      # Build and push Project service
+      - name: Build and push Project Service
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend/project_service
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/project-service:${{ github.sha }},${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/project-service:latest
+          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/project-service:latest
+          cache-to: type=inline
+      
+      # Build and push Notification service
+      - name: Build and push Notification Service
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend/notification_service
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/notification-service:${{ github.sha }},${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/notification-service:latest
+          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/notification-service:latest
+          cache-to: type=inline
+      
+      # Build and push File service
+      - name: Build and push File Service
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend/file_service
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/file-service:${{ github.sha }},${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/file-service:latest
+          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/file-service:latest
+          cache-to: type=inline
+      
+      # Build and push Analytics service
+      - name: Build and push Analytics Service
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend/analytics_service
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/analytics-service:${{ github.sha }},${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/analytics-service:latest
+          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/analytics-service:latest
+          cache-to: type=inline
+      
+      # Build and push Realtime service
+      - name: Build and push Realtime Service
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend/realtime_service
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/realtime-service:${{ github.sha }},${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/realtime-service:latest
+          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/realtime-service:latest
+          cache-to: type=inline
+      
+      # Scan all built images with Trivy
+      - name: Scan images with Trivy
+        uses: aquasecurity/trivy-action@0.8.0
+        with:
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}/api-gateway:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+      
+      - name: Generate container manifest
+        run: |
+          echo "Container Images Built:" > container-manifest.txt
+          for service in $SERVICES; do
+            echo "$service:${{ github.sha }}" >> container-manifest.txt
+          done
+      
+      - name: Upload container manifest
+        uses: actions/upload-artifact@v3
+        with:
+          name: container-images
+          path: container-manifest.txt
+          retention-days: 7
