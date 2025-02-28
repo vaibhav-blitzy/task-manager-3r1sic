@@ -1,0 +1,327 @@
+version: '3.8'
+
+services:
+  # Database services
+  mongodb:
+    image: mongo:5.0
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+      MONGO_INITDB_DATABASE: task_management
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - backend-network
+    restart: unless-stopped
+    healthcheck:
+      test: mongosh --eval 'db.adminCommand("ping")' --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:6.2-alpine
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - backend-network
+    restart: unless-stopped
+    healthcheck:
+      test: redis-cli ping
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    command: redis-server --appendonly yes
+
+  # API Gateway
+  api_gateway:
+    build:
+      context: ./services/api_gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    networks:
+      - backend-network
+    depends_on:
+      auth:
+        condition: service_healthy
+      task:
+        condition: service_healthy
+      project:
+        condition: service_healthy
+      notification:
+        condition: service_healthy
+      file:
+        condition: service_healthy
+      analytics:
+        condition: service_healthy
+      realtime:
+        condition: service_healthy
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - AUTH_SERVICE_URL=http://auth:8001
+      - TASK_SERVICE_URL=http://task:8002
+      - PROJECT_SERVICE_URL=http://project:8003
+      - NOTIFICATION_SERVICE_URL=http://notification:8004
+      - FILE_SERVICE_URL=http://file:8005
+      - ANALYTICS_SERVICE_URL=http://analytics:8006
+      - REALTIME_SERVICE_URL=http://realtime:8007
+    restart: unless-stopped
+    healthcheck:
+      test: curl --fail http://localhost:8000/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./services/api_gateway:/app
+
+  # Authentication Service
+  auth:
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    networks:
+      - backend-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - PORT=8001
+      - MONGO_URI=mongodb://root:example@mongodb:27017/task_management?authSource=admin
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET_KEY=dev_secret_key
+      - JWT_ACCESS_TOKEN_EXPIRES=900
+      - JWT_REFRESH_TOKEN_EXPIRES=604800
+    restart: unless-stopped
+    healthcheck:
+      test: curl --fail http://localhost:8001/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./services/auth:/app
+
+  # Task Service
+  task:
+    build:
+      context: ./services/task
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    networks:
+      - backend-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - PORT=8002
+      - MONGO_URI=mongodb://root:example@mongodb:27017/task_management?authSource=admin
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AUTH_SERVICE_URL=http://auth:8001
+    restart: unless-stopped
+    healthcheck:
+      test: curl --fail http://localhost:8002/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./services/task:/app
+
+  # Project Service
+  project:
+    build:
+      context: ./services/project
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    networks:
+      - backend-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - PORT=8003
+      - MONGO_URI=mongodb://root:example@mongodb:27017/task_management?authSource=admin
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AUTH_SERVICE_URL=http://auth:8001
+    restart: unless-stopped
+    healthcheck:
+      test: curl --fail http://localhost:8003/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./services/project:/app
+
+  # Notification Service
+  notification:
+    build:
+      context: ./services/notification
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8004"
+    networks:
+      - backend-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - PORT=8004
+      - MONGO_URI=mongodb://root:example@mongodb:27017/task_management?authSource=admin
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AUTH_SERVICE_URL=http://auth:8001
+      - EMAIL_SERVICE=smtp
+      - SMTP_HOST=mailhog
+      - SMTP_PORT=1025
+    restart: unless-stopped
+    healthcheck:
+      test: curl --fail http://localhost:8004/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./services/notification:/app
+
+  # File Service
+  file:
+    build:
+      context: ./services/file
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8005"
+    networks:
+      - backend-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - PORT=8005
+      - MONGO_URI=mongodb://root:example@mongodb:27017/task_management?authSource=admin
+      - AUTH_SERVICE_URL=http://auth:8001
+      - STORAGE_TYPE=local
+      - STORAGE_PATH=/app/storage
+      - MAX_CONTENT_LENGTH=10485760
+    restart: unless-stopped
+    healthcheck:
+      test: curl --fail http://localhost:8005/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./services/file:/app
+      - file_storage:/app/storage
+
+  # Analytics Service
+  analytics:
+    build:
+      context: ./services/analytics
+      dockerfile: Dockerfile
+    ports:
+      - "8006:8006"
+    networks:
+      - backend-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - PORT=8006
+      - MONGO_URI=mongodb://root:example@mongodb:27017/task_management?authSource=admin
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AUTH_SERVICE_URL=http://auth:8001
+      - TASK_SERVICE_URL=http://task:8002
+      - PROJECT_SERVICE_URL=http://project:8003
+    restart: unless-stopped
+    healthcheck:
+      test: curl --fail http://localhost:8006/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./services/analytics:/app
+
+  # Realtime Service
+  realtime:
+    build:
+      context: ./services/realtime
+      dockerfile: Dockerfile
+    ports:
+      - "8007:8007"
+    networks:
+      - backend-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - PORT=8007
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AUTH_SERVICE_URL=http://auth:8001
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000
+    restart: unless-stopped
+    healthcheck:
+      test: curl --fail http://localhost:8007/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./services/realtime:/app
+
+  # Email testing service for development
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - "1025:1025"  # SMTP port
+      - "8025:8025"  # Web UI port
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
+    # Persistent storage for MongoDB data
+  redis_data:
+    # Persistent storage for Redis data
+  file_storage:
+    # Persistent storage for uploaded files
+
+networks:
+  backend-network:
+    driver: bridge
